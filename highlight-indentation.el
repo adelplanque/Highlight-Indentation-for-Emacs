@@ -118,73 +118,46 @@ Known issues:
 
 (defun highlight-indentation-put-overlays-region (start end overlay)
   "Place overlays between START and END."
-  (goto-char end)
-  (let (o ;; overlay
-        (last-indent 0)
-        (last-char 0)
-        (pos (point))
-        (loop t))
-    (while (and loop
-                (>= pos start))
-      (save-excursion
-        (beginning-of-line)
-        (let ((c 0)
-              (cur-column (current-column)))
-          (while (and (setq c (char-after))
-                      (integerp c)
-                      (not (= 10 c)) ;; newline
-                      (= 32 c)) ;; space
-            (when (= 0 (% cur-column highlight-indentation-offset))
-              (let ((p (point)))
-                (setq o (make-overlay p (+ p 1))))
-              (overlay-put o overlay t)
-              (overlay-put o 'priority highlight-indentation-overlay-priority)
-              (overlay-put o 'display highlight-indentation-overlay-string)
-              (overlay-put o 'face 'highlight-indentation-face))
-            (forward-char)
-            (setq cur-column (current-column)))
-          (when (and highlight-indentation-blank-lines
-                     (integerp c)
-                     (or (= 10 c)
-                         (= 13 c)))
-            (when (< cur-column last-indent)
-              (let ((column cur-column)
-                    (s nil)
-                    (show t)
-                    num-spaces)
-                (while (< column last-indent)
-                  (if (>= 0
-                          (setq num-spaces
-                                (%
-                                 (- last-indent column)
-                                 highlight-indentation-offset)))
-                      (progn
-                        (setq num-spaces (1- highlight-indentation-offset))
-                        (setq show t))
-                    (setq show nil))
-                  (setq s (cons (concat
-                                 (if show
-                                     (propertize highlight-indentation-overlay-string
-                                                 'face
-                                                 'highlight-indentation-face)
-                                   "")
-                                 (make-string num-spaces 32))
-                                s))
-                  (setq column (+ column num-spaces (if show 1 0))))
-                (setq s (apply 'concat (reverse s)))
-                (let ((p (point)))
-                  (setq o (make-overlay p p)))
-                (overlay-put o overlay t)
-                (overlay-put o 'priority highlight-indentation-overlay-priority)
-                (overlay-put o 'after-string s))
-              (setq cur-column last-indent)))
-          (setq last-indent (* highlight-indentation-offset
-                               (ceiling (/ (float cur-column)
-                                           highlight-indentation-offset))))))
-      (when (= pos start)
-        (setq loop nil))
-      (forward-line -1) ;; previous line
-      (setq pos (point)))))
+  (save-excursion
+    (goto-char end)
+    (if (= (line-beginning-position) (point)) (forward-line -1))
+    (beginning-of-line)
+    (let ((last-indent-level
+           (save-excursion (length (overlays-in (progn (forward-line) (point))
+                                                (progn (forward-line) (point))))))
+          (continue t))
+      (while continue
+        (let ((indent-level (if (looking-at-p "[[:blank:]]*$")
+                                (if highlight-indentation-blank-lines last-indent-level 0)
+                              (/ (current-indentation) highlight-indentation-offset)))
+              (cur-level 0))
+          (setq last-indent-level indent-level)
+          (while (< cur-level indent-level)
+            (let ((pos (+ (point) (* cur-level highlight-indentation-offset)))
+                  (eol (line-end-position)))
+              (if (< pos eol)
+                  (let ((o (make-overlay pos (1+ pos))))
+                    (overlay-put o overlay t)
+                    (overlay-put o 'priority highlight-indentation-overlay-priority)
+                    (overlay-put o 'display highlight-indentation-overlay-string)
+                    (overlay-put o 'face 'highlight-indentation-face))
+                (let ((o (make-overlay eol eol))
+                      (col (* cur-level highlight-indentation-offset)))
+                  (overlay-put o overlay t)
+                  (overlay-put o 'priority highlight-indentation-overlay-priority)
+                  (overlay-put o 'after-string
+                               (concat
+                                (propertize " "
+                                            'display `((space :align-to ,col)
+                                                       (space :width 0))
+                                            'cursor 0)
+                                (propertize highlight-indentation-overlay-string
+                                            'face 'highlight-indentation-face
+                                            'cursor 0))))))
+            (setq cur-level (1+ cur-level))))
+        (setq continue (> (point) start))
+        (forward-line -1)
+        (beginning-of-line)))))
 
 (defun highlight-indentation-guess-offset ()
   "Get indentation offset of current buffer."
