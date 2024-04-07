@@ -291,6 +291,7 @@ from major mode"
                 o (make-overlay pos (+ pos 1)))
           (overlay-put o overlay t)
           (overlay-put o 'priority highlight-indentation-current-column-overlay-priority)
+          (overlay-put o 'display highlight-indentation-overlay-string)
           (overlay-put o 'face 'highlight-indentation-current-column-face))
         (forward-char))
       (forward-line) ;; Next line
